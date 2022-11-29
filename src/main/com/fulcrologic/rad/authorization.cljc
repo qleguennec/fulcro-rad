@@ -182,11 +182,14 @@
                                                   status   (get-in state-map [::authorization provider ::status])
                                                   {:keys [after-session-check]} (uism/retrieve env :config)
                                                   ok?      (= :success status)]
-                                              (when after-session-check
-                                                (comp/transact! fulcro-app `[(~after-session-check {})]))
+                                              (log/info status)
+                                              (when ok?
+                                                (log/info "Session check success"))
                                               (cond-> env
                                                 ok? (-add-authenticated-provider provider)
-                                                (not ok?) (remove-authenticated-provider provider))))}
+                                                (not ok?) (remove-authenticated-provider provider)
+                                                after-session-check
+                                                (uism/transact `[(~after-session-check {})]))))}
    :event/authenticate    {::uism/handler (fn [{::uism/keys [event-data] :as env}]
                                             (let [{:keys [provider]} event-data
                                                   authenticated (uism/retrieve env :authenticated)]
