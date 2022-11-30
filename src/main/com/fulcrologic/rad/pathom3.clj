@@ -79,20 +79,8 @@
 
 
 
-(letfn [(wrap-mutate-exceptions [mutate]
-          (fn [env ast]
-            (try
-              (mutate env ast)
-              (catch Throwable e
-                (log/errorf e "Mutation %s failed." (:key ast))
-                ;; FIXME: Need a bit more work on returning errors that are handled globally.
-                ;; Probably should just propagate exceptions out, so the client sees a server error
-                ;; Pathom 2 compatible message so UI can detect the problem
-                {:com.wsscode.pathom.core/errors [{:message (ex-message e)
-                                                   :data    (ex-data e)}]}))))]
-  (p.plugin/defplugin rewrite-mutation-exceptions {::pcr/wrap-mutate wrap-mutate-exceptions})
-  (defn new-processor
-    "Create a new EQL processor. You may pass Pathom 2 resolvers or mutations to this function, but beware
+(defn new-processor
+  "Create a new EQL processor. You may pass Pathom 2 resolvers or mutations to this function, but beware
      that the translation is not 100% perfect, since the `env` is different between the two versions.
 
      The config options go under :com.fulcrologic.rad.pathom/config, and include:
@@ -101,26 +89,26 @@
      - `:log-responses? boolean` Enable logging of parser results.
      - `:sensitive-keys` a set of keywords that should not have their values logged
      "
-    [{{:keys [log-requests? log-responses?]} :com.fulcrologic.rad.pathom/config :as config} env-middleware extra-plugins resolvers]
-    (let [base-env (-> {}
-                     (p.plugin/register extra-plugins)
-                     (p.plugin/register-plugin attribute-error-plugin)
-                     (p.plugin/register-plugin rewrite-mutation-exceptions)
-                     ;(p.plugin/register-plugin log-resolver-error)
-                     (pci/register (convert-resolvers resolvers))
-                     (assoc :config config))
-          process  (p.eql/boundary-interface base-env)]
-      (fn [env tx]
-        (when log-requests?
-          (rpc/log-request! {:env env :tx tx}))
-        (let [ast      (eql/query->ast tx)
-              env      (assoc
-                         (env-middleware env)
-                         ;; for p2 compatibility
-                         :parser p.eql/process
-                         ;; legacy param support
-                         :query-params (rpc/combined-query-params ast))
-              response (process env {:pathom/ast           ast
-                                     :pathom/lenient-mode? true})]
-          (when log-responses? (rpc/log-response! env response))
-          response)))))
+  [{{:keys [log-requests? log-responses?]} :com.fulcrologic.rad.pathom/config :as config} env-middleware extra-plugins resolvers]
+  (let [base-env (-> {}
+                   (p.plugin/register extra-plugins)
+                   (p.plugin/register-plugin attribute-error-plugin)
+                   ;; (p.plugin/register-plugin rewrite-mutation-exceptions)
+                                        ;(p.plugin/register-plugin log-resolver-error)
+                   (pci/register (convert-resolvers resolvers))
+                   (assoc :config config))
+        process  (p.eql/boundary-interface base-env)]
+    (fn [env tx]
+      (when log-requests?
+        (rpc/log-request! {:env env :tx tx}))
+      (let [ast      (eql/query->ast tx)
+            env      (assoc
+                       (env-middleware env)
+                       ;; for p2 compatibility
+                       :parser p.eql/process
+                       ;; legacy param support
+                       :query-params (rpc/combined-query-params ast))
+            response (process env {:pathom/ast           ast
+                                   :pathom/lenient-mode? true})]
+        (when log-responses? (rpc/log-response! env response))
+        response))))
